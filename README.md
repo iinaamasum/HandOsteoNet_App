@@ -121,10 +121,8 @@ The application will be available at `http://localhost:8501`
 ## Performance Metrics
 
 The model achieves:
-- **MAE**: ~4.95 months
-- **RMSE**: ~6.67 months
-- **MAPE**: ~5.05%
-- **R²**: ~0.974
+- **MAE**: ~4.70 months
+- **R²**: ~0.9766
 
 ## Clinical Integration
 
