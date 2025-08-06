@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import os
 
 def convert_months_to_years_months(months):
     """
@@ -32,21 +33,42 @@ def calculate_metrics(predicted_age, actual_age):
 
 def load_model(model_path, device):
     """
-    Load the trained model
+    Load the trained model with improved error handling
     """
-    from Model.model import BoneAgeFullModel
-    
-    model = BoneAgeFullModel()
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.to(device)
-    model.eval()
-    
-    return model
+    try:
+        from Model.model import BoneAgeFullModel
+        
+        # Check if model file exists
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found at: {model_path}")
+        
+        # Create model instance
+        model = BoneAgeFullModel()
+        
+        # Load state dict with proper error handling
+        state_dict = torch.load(model_path, map_location=device)
+        model.load_state_dict(state_dict)
+        
+        # Move to device and set to eval mode
+        model.to(device)
+        model.eval()
+        
+        # Verify model is properly loaded
+        if model is None:
+            raise RuntimeError("Model failed to initialize")
+        
+        return model
+        
+    except Exception as e:
+        print(f"Error loading model: {str(e)}")
+        raise e
 
 def get_target_layer(model):
     """
     Get the target layer for GradCAM (last conv layer in stage4)
     """
+    if model is None:
+        raise ValueError("Model is None, cannot get target layer")
     return model.seg_model.s4
 
 def format_prediction(predicted_months):

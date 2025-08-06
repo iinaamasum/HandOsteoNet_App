@@ -35,7 +35,8 @@ st.set_page_config(
 )
 
 # Custom CSS for medical AI styling
-st.markdown("""
+st.markdown(
+    """
 <style>
     /* Global container width */
     .main .block-container {
@@ -304,7 +305,10 @@ st.markdown("""
         font-weight: bold;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # Initialize session state properly
 def initialize_session_state():
@@ -322,15 +326,17 @@ def initialize_session_state():
     if "data_manager" not in st.session_state:
         st.session_state.data_manager = None
 
+
 # Initialize session state
 initialize_session_state()
+
 
 @st.cache_resource
 def get_device():
     """Get device with caching"""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-@st.cache_resource
+
 def load_model_safely():
     """Load the model safely with error handling and caching"""
     try:
@@ -346,16 +352,141 @@ def load_model_safely():
                     st.error(f"Model file not found at: {model_path}")
                     return False
 
-                model = load_model(model_path, device)
-                st.session_state.model = model
-                st.session_state.model_loaded = True
+                try:
+                    model = load_model(model_path, device)
 
-                st.success("Model loaded successfully!")
-                return True
-        return True
+                    # Verify model is properly loaded
+                    if model is None:
+                        st.error("Model failed to load properly")
+                        return False
+
+                    st.session_state.model = model
+                    st.session_state.model_loaded = True
+
+                    st.success("Model loaded successfully!")
+                    return True
+
+                except Exception as e:
+                    st.error(f"Error loading model: {str(e)}")
+                    return False
+        else:
+            # Verify model is still available
+            if st.session_state.model is None:
+                st.error("Model was loaded but is now None. Please refresh the page.")
+                st.session_state.model_loaded = False
+                return False
+            return True
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
+        st.error(f"Error in model loading process: {str(e)}")
         return False
+
+
+def validate_model_working():
+    """Test if the model is working properly"""
+    try:
+        if st.session_state.model is None:
+            return False, "Model is None"
+        
+        # Create a dummy input to test the model
+        device = st.session_state.device
+        dummy_image = torch.randn(1, 3, 480, 480).to(device)
+        dummy_gender = torch.tensor([1.0]).to(device)
+        
+        with torch.no_grad():
+            output = st.session_state.model(dummy_image, dummy_gender)
+        
+        if output is None:
+            return False, "Model output is None"
+        
+        return True, f"Model is working (output: {output.item():.2f})"
+        
+    except Exception as e:
+        return False, f"Model validation failed: {str(e)}"
+
+
+def reload_model():
+    """Manually reload the model"""
+    try:
+        st.session_state.model_loaded = False
+        st.session_state.model = None
+
+        with st.spinner("Reloading model..."):
+            device = get_device()
+            st.session_state.device = device
+
+            model_path = "Model/best_bonenet.pth"
+            if not os.path.exists(model_path):
+                st.error(f"Model file not found at: {model_path}")
+                return False
+
+            model = load_model(model_path, device)
+            if model is None:
+                st.error("Model failed to load properly")
+                return False
+
+            st.session_state.model = model
+            st.session_state.model_loaded = True
+            st.success("Model reloaded successfully!")
+            return True
+
+    except Exception as e:
+        st.error(f"Error reloading model: {str(e)}")
+        return False
+
+
+def debug_model_status():
+    """Debug function to check model status"""
+    st.write("### Debug Information")
+    st.write(f"Model loaded: {st.session_state.model_loaded}")
+    st.write(f"Model is None: {st.session_state.model is None}")
+    st.write(f"Device: {st.session_state.device}")
+
+    if st.session_state.model is not None:
+        st.write(f"Model type: {type(st.session_state.model)}")
+        st.write(f"Model device: {next(st.session_state.model.parameters()).device}")
+
+        # Test if model is working
+        is_working, message = validate_model_working()
+        st.write(f"Model working: {is_working}")
+        st.write(f"Model status: {message}")
+    else:
+        st.write("Model is None - this is the problem!")
+
+    # Add reload button
+    if st.button("Reload Model"):
+        reload_model()
+
+
+def safe_model_prediction(model, image_tensor, gender_tensor):
+    """Safely make a prediction with proper error handling"""
+    try:
+        if model is None:
+            raise ValueError("Model is None")
+
+        with torch.no_grad():
+            prediction = model(image_tensor.unsqueeze(0), gender_tensor)
+
+        return prediction
+    except Exception as e:
+        st.error(f"Prediction failed: {str(e)}")
+        # Add debug information
+        debug_model_status()
+        return None
+
+
+def validate_model_for_prediction():
+    """Validate that the model is ready for prediction"""
+    if not st.session_state.model_loaded:
+        st.error("Model is not loaded. Please wait for model loading to complete.")
+        return False
+
+    if st.session_state.model is None:
+        st.error("Model is None. Please refresh the page to reload the model.")
+        st.session_state.model_loaded = False
+        return False
+
+    return True
+
 
 @st.cache_resource
 def get_preprocessor():
@@ -364,6 +495,7 @@ def get_preprocessor():
         st.session_state.preprocessor = ImagePreprocessor()
     return st.session_state.preprocessor
 
+
 @st.cache_resource
 def get_data_manager():
     """Get data manager with caching"""
@@ -371,34 +503,41 @@ def get_data_manager():
         st.session_state.data_manager = DataManager()
     return st.session_state.data_manager
 
+
 def create_navigation():
     """Create navigation menu"""
-    st.markdown("""
+    st.markdown(
+        """
     <div class="nav-container">
         <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem;">
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     pages = [
         ("Home", "Home"),
         ("Evaluate Model", "Evaluate"),
         ("Testing & Save", "Testing"),
         ("Sample Images", "Samples"),
         ("How to Use", "HowToUse"),
-        ("Privacy Policy", "Privacy")
+        ("Privacy Policy", "Privacy"),
     ]
-    
+
     cols = st.columns(len(pages))
     for i, (label, page) in enumerate(pages):
         with cols[i]:
             # Check if this is the current page
             is_active = st.session_state.current_page == page
             button_style = "primary" if is_active else "secondary"
-            
-            if st.button(label, key=f"nav_{page}", use_container_width=True, type=button_style):
+
+            if st.button(
+                label, key=f"nav_{page}", use_container_width=True, type=button_style
+            ):
                 st.session_state.current_page = page
                 st.rerun()
-    
+
     st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 def display_image_with_aspect_ratio(image, caption, max_width=400):
     """Display image maintaining aspect ratio"""
@@ -421,17 +560,22 @@ def display_image_with_aspect_ratio(image, caption, max_width=400):
     with col2:
         st.image(resized_image, caption=caption, use_container_width=True)
 
+
 def home_page():
     """Home page content"""
-    st.markdown("""
+    st.markdown(
+        """
     <div class="main-header">
         <h1>HandOsteoNet</h1>
         <h3>Advanced Bone Age Assessment System</h3>
         <p>Developed by Qatar University Research Team, led by Amith Khandakar</p>
     </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
     ## Welcome to HandOsteoNet
     
     HandOsteoNet is an advanced AI-powered system for bone age assessment from hand x-ray images. 
@@ -456,13 +600,19 @@ def home_page():
     - Internet connection for model loading
     - Supported image formats: PNG, JPG, JPEG
     
-    """)
-    
+    """
+    )
+
     # Load model status
     if load_model_safely():
         st.success("✅ Model is ready for analysis")
     else:
         st.error("❌ Model loading failed. Please refresh the page.")
+
+    # Debug section (expandable)
+    with st.expander("🔧 Debug Information"):
+        debug_model_status()
+
 
 def evaluate_page():
     """Model evaluation page"""
@@ -471,6 +621,10 @@ def evaluate_page():
 
     # Load model
     if not load_model_safely():
+        st.stop()
+
+    # Validate model for prediction
+    if not validate_model_for_prediction():
         st.stop()
 
     # Initialize components
@@ -499,31 +653,43 @@ def evaluate_page():
     col_status1, col_status2 = st.columns(2)
     with col_status1:
         if uploaded_file is not None:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-success">
                 ✅ X-Ray uploaded successfully
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-warning">
                 ⚠️ X-Ray upload required
             </div>
-            """, unsafe_allow_html=True)
-    
+            """,
+                unsafe_allow_html=True,
+            )
+
     with col_status2:
         if gender != "" and gender is not None:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="status-indicator status-success">
                 ✅ Gender selected: {gender}
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-warning">
                 ⚠️ Gender selection required
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
     # Evaluate button
     if st.button(
@@ -554,96 +720,105 @@ def evaluate_page():
                     gender_tensor = gender_tensor.to(st.session_state.device)
 
                     # Make prediction
-                    with torch.no_grad():
-                        prediction = st.session_state.model(
-                            image_tensor.unsqueeze(0), gender_tensor
-                        )
-
-                    predicted_months = prediction.item()
-                    formatted_prediction = format_prediction(predicted_months)
-
-                    # Display results
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.markdown(
-                            '<div class="prediction-card">', unsafe_allow_html=True
-                        )
-                        st.markdown(f"### Prediction Results")
-                        st.markdown(
-                            f"**Bone Age:** {formatted_prediction['years_months']}"
-                        )
-                        st.markdown(f"**Months:** {formatted_prediction['months']}")
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    with col2:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f"### Model Confidence")
-                        st.markdown(f"**Prediction Confidence:** High")
-                        st.markdown(f"**Model Status:** Active")
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    # Display images with proper aspect ratio
-                    st.markdown("### Analysis Visualization")
-
-                    # Original image
-                    inv_norm = torch.nn.Sequential(
-                        torchvision.transforms.Normalize(
-                            mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225],
-                            std=[1 / 0.229, 1 / 0.224, 1 / 0.225],
-                        )
+                    prediction = safe_model_prediction(
+                        st.session_state.model, image_tensor, gender_tensor
                     )
-                    orig_img = inv_norm(image_tensor)
-                    orig_img_np = orig_img.detach().permute(1, 2, 0).cpu().numpy()
-                    orig_img_np = np.clip(orig_img_np, 0, 1)
-                    orig_img_display = (orig_img_np[:, :, 0] * 255).astype(np.uint8)
 
-                    # Create PIL image for display
-                    orig_pil = Image.fromarray(orig_img_display)
+                    if prediction is not None:
+                        predicted_months = prediction.item()
+                        formatted_prediction = format_prediction(predicted_months)
 
-                    # Generate GradCAM
-                    try:
-                        target_layer = get_target_layer(st.session_state.model)
-                        cam = generate_gradcam(
-                            st.session_state.model,
-                            image_tensor,
-                            gender_tensor,
-                            target_layer,
+                        # Display results
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.markdown(
+                                '<div class="prediction-card">', unsafe_allow_html=True
+                            )
+                            st.markdown(f"### Prediction Results")
+                            st.markdown(
+                                f"**Bone Age:** {formatted_prediction['years_months']}"
+                            )
+                            st.markdown(f"**Months:** {formatted_prediction['months']}")
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        with col2:
+                            st.markdown(
+                                '<div class="metric-card">', unsafe_allow_html=True
+                            )
+                            st.markdown(f"### Model Confidence")
+                            st.markdown(f"**Prediction Confidence:** High")
+                            st.markdown(f"**Model Status:** Active")
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        # Display images with proper aspect ratio
+                        st.markdown("### Analysis Visualization")
+
+                        # Original image
+                        inv_norm = torch.nn.Sequential(
+                            torchvision.transforms.Normalize(
+                                mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225],
+                                std=[1 / 0.229, 1 / 0.224, 1 / 0.225],
+                            )
                         )
+                        orig_img = inv_norm(image_tensor)
+                        orig_img_np = orig_img.detach().permute(1, 2, 0).cpu().numpy()
+                        orig_img_np = np.clip(orig_img_np, 0, 1)
+                        orig_img_display = (orig_img_np[:, :, 0] * 255).astype(np.uint8)
 
-                        # Save GradCAM image with unique name
-                        timestamp = int(time.time())
-                        temp_gradcam_path = f"temp_gradcam_{timestamp}.png"
-                        gradcam_success = save_gradcam_image(
-                            image_tensor, cam, temp_gradcam_path
-                        )
+                        # Create PIL image for display
+                        orig_pil = Image.fromarray(orig_img_display)
 
-                        col_img1, col_img2 = st.columns(2)
-                        with col_img1:
+                        # Generate GradCAM
+                        try:
+                            target_layer = get_target_layer(st.session_state.model)
+                            cam = generate_gradcam(
+                                st.session_state.model,
+                                image_tensor,
+                                gender_tensor,
+                                target_layer,
+                            )
+
+                            # Save GradCAM image with unique name
+                            timestamp = int(time.time())
+                            temp_gradcam_path = f"temp_gradcam_{timestamp}.png"
+                            gradcam_success = save_gradcam_image(
+                                image_tensor, cam, temp_gradcam_path
+                            )
+
+                            col_img1, col_img2 = st.columns(2)
+                            with col_img1:
+                                display_image_with_aspect_ratio(
+                                    orig_pil, "Original X-Ray", 400
+                                )
+
+                            with col_img2:
+                                if gradcam_success and os.path.exists(
+                                    temp_gradcam_path
+                                ):
+                                    gradcam_img = Image.open(temp_gradcam_path)
+                                    display_image_with_aspect_ratio(
+                                        gradcam_img, "GradCAM Analysis", 400
+                                    )
+                                else:
+                                    st.error("GradCAM analysis could not be generated")
+
+                            # Clean up temporary file
+                            if os.path.exists(temp_gradcam_path):
+                                os.remove(temp_gradcam_path)
+
+                        except Exception as e:
+                            st.error(f"Error generating GradCAM: {str(e)}")
+                            # Show only original image if GradCAM fails
                             display_image_with_aspect_ratio(
                                 orig_pil, "Original X-Ray", 400
                             )
-
-                        with col_img2:
-                            if gradcam_success and os.path.exists(temp_gradcam_path):
-                                gradcam_img = Image.open(temp_gradcam_path)
-                                display_image_with_aspect_ratio(
-                                    gradcam_img, "GradCAM Analysis", 400
-                                )
-                            else:
-                                st.error("GradCAM analysis could not be generated")
-
-                        # Clean up temporary file
-                        if os.path.exists(temp_gradcam_path):
-                            os.remove(temp_gradcam_path)
-
-                    except Exception as e:
-                        st.error(f"Error generating GradCAM: {str(e)}")
-                        # Show only original image if GradCAM fails
-                        display_image_with_aspect_ratio(orig_pil, "Original X-Ray", 400)
+                    else:
+                        st.error("Prediction failed. Please try again.")
 
             except Exception as e:
                 st.error(f"Error during evaluation: {str(e)}")
+
 
 def testing_page():
     """Testing and save data page"""
@@ -654,6 +829,10 @@ def testing_page():
 
     # Load model
     if not load_model_safely():
+        st.stop()
+
+    # Validate model for prediction
+    if not validate_model_for_prediction():
         st.stop()
 
     # Initialize components
@@ -691,10 +870,10 @@ def testing_page():
 
     # Check if all required fields are filled for testing
     is_test_ready = (
-        uploaded_file_test is not None 
-        and gender_test != "" 
-        and gender_test is not None 
-        and actual_age is not None 
+        uploaded_file_test is not None
+        and gender_test != ""
+        and gender_test is not None
+        and actual_age is not None
         and actual_age > 0
     )
 
@@ -702,45 +881,63 @@ def testing_page():
     col_status1, col_status2, col_status3 = st.columns(3)
     with col_status1:
         if uploaded_file_test is not None:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-success">
                 ✅ X-Ray uploaded successfully
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-warning">
                 ⚠️ X-Ray upload required
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
     with col_status2:
         if gender_test != "" and gender_test is not None:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="status-indicator status-success">
                 ✅ Gender selected: {gender_test}
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-warning">
                 ⚠️ Gender selection required
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
     with col_status3:
         if actual_age is not None and actual_age > 0:
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="status-indicator status-success">
                 ✅ Age entered: {actual_age} months
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="status-indicator status-warning">
                 ⚠️ Age required
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
     # Test and Save button
     if st.button(
@@ -777,125 +974,150 @@ def testing_page():
                     gender_tensor = gender_tensor.to(st.session_state.device)
 
                     # Make prediction
-                    with torch.no_grad():
-                        prediction = st.session_state.model(
-                            image_tensor.unsqueeze(0), gender_tensor
-                        )
-
-                    predicted_months = prediction.item()
-                    formatted_prediction = format_prediction(predicted_months)
-
-                    # Calculate metrics
-                    metrics = calculate_metrics(predicted_months, actual_age)
-
-                    # Save data (only for local deployment)
-                    is_local = os.path.exists("/Users") or os.path.exists("/home/user")
-                    if is_local:
-                        gender_bool = gender_test == "Male"
-                        xray_id, image_path = data_manager.save_xray_data(
-                            image_tensor, gender_bool, actual_age
-                        )
-                        st.markdown('<div class="success-card">', unsafe_allow_html=True)
-                        st.success(f"✅ Data saved successfully! X-Ray ID: {xray_id}")
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="info-card">', unsafe_allow_html=True)
-                        st.info("ℹ️ Data saving is disabled in cloud deployment for privacy and security.")
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    # Results in columns
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.markdown(
-                            '<div class="prediction-card">', unsafe_allow_html=True
-                        )
-                        st.markdown(f"### Prediction Results")
-                        st.markdown(
-                            f"**Predicted Bone Age:** {formatted_prediction['years_months']}"
-                        )
-                        st.markdown(
-                            f"**Predicted Months:** {formatted_prediction['months']}"
-                        )
-                        st.markdown(
-                            f"**Actual Bone Age:** {convert_months_to_years_months(actual_age)}"
-                        )
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    with col2:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f"### Evaluation Metrics")
-                        st.metric("Absolute Error", f"{metrics['error']:.1f} months")
-                        st.metric("Deviation", f"{metrics['deviation']:.1f} months")
-                        st.metric("Percent Error", f"{metrics['percent_error']:.1f}%")
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    # Display images with proper aspect ratio
-                    st.markdown("### Analysis Visualization")
-
-                    # Original image
-                    inv_norm = torch.nn.Sequential(
-                        torchvision.transforms.Normalize(
-                            mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225],
-                            std=[1 / 0.229, 1 / 0.224, 1 / 0.225],
-                        )
+                    prediction = safe_model_prediction(
+                        st.session_state.model, image_tensor, gender_tensor
                     )
-                    orig_img = inv_norm(image_tensor)
-                    orig_img_np = orig_img.detach().permute(1, 2, 0).cpu().numpy()
-                    orig_img_np = np.clip(orig_img_np, 0, 1)
-                    orig_img_display = (orig_img_np[:, :, 0] * 255).astype(np.uint8)
 
-                    # Create PIL image for display
-                    orig_pil = Image.fromarray(orig_img_display)
+                    if prediction is not None:
+                        predicted_months = prediction.item()
+                        formatted_prediction = format_prediction(predicted_months)
 
-                    # Generate GradCAM
-                    try:
-                        target_layer = get_target_layer(st.session_state.model)
-                        cam = generate_gradcam(
-                            st.session_state.model,
-                            image_tensor,
-                            gender_tensor,
-                            target_layer,
+                        # Calculate metrics
+                        metrics = calculate_metrics(predicted_months, actual_age)
+
+                        # Save data (only for local deployment)
+                        is_local = os.path.exists("/Users") or os.path.exists(
+                            "/home/user"
                         )
+                        if is_local:
+                            gender_bool = gender_test == "Male"
+                            xray_id, image_path = data_manager.save_xray_data(
+                                image_tensor, gender_bool, actual_age
+                            )
+                            st.markdown(
+                                '<div class="success-card">', unsafe_allow_html=True
+                            )
+                            st.success(
+                                f"✅ Data saved successfully! X-Ray ID: {xray_id}"
+                            )
+                            st.markdown("</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(
+                                '<div class="info-card">', unsafe_allow_html=True
+                            )
+                            st.info(
+                                "ℹ️ Data saving is disabled in cloud deployment for privacy and security."
+                            )
+                            st.markdown("</div>", unsafe_allow_html=True)
 
-                        # Save GradCAM image with unique name
-                        timestamp = int(time.time())
-                        temp_gradcam_path = f"temp_gradcam_test_{timestamp}.png"
-                        gradcam_success = save_gradcam_image(
-                            image_tensor, cam, temp_gradcam_path
+                        # Results in columns
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.markdown(
+                                '<div class="prediction-card">', unsafe_allow_html=True
+                            )
+                            st.markdown(f"### Prediction Results")
+                            st.markdown(
+                                f"**Predicted Bone Age:** {formatted_prediction['years_months']}"
+                            )
+                            st.markdown(
+                                f"**Predicted Months:** {formatted_prediction['months']}"
+                            )
+                            st.markdown(
+                                f"**Actual Bone Age:** {convert_months_to_years_months(actual_age)}"
+                            )
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        with col2:
+                            st.markdown(
+                                '<div class="metric-card">', unsafe_allow_html=True
+                            )
+                            st.markdown(f"### Evaluation Metrics")
+                            st.metric(
+                                "Absolute Error", f"{metrics['error']:.1f} months"
+                            )
+                            st.metric("Deviation", f"{metrics['deviation']:.1f} months")
+                            st.metric(
+                                "Percent Error", f"{metrics['percent_error']:.1f}%"
+                            )
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        # Display images with proper aspect ratio
+                        st.markdown("### Analysis Visualization")
+
+                        # Original image
+                        inv_norm = torch.nn.Sequential(
+                            torchvision.transforms.Normalize(
+                                mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225],
+                                std=[1 / 0.229, 1 / 0.224, 1 / 0.225],
+                            )
                         )
+                        orig_img = inv_norm(image_tensor)
+                        orig_img_np = orig_img.detach().permute(1, 2, 0).cpu().numpy()
+                        orig_img_np = np.clip(orig_img_np, 0, 1)
+                        orig_img_display = (orig_img_np[:, :, 0] * 255).astype(np.uint8)
 
-                        col_img1, col_img2 = st.columns(2)
-                        with col_img1:
+                        # Create PIL image for display
+                        orig_pil = Image.fromarray(orig_img_display)
+
+                        # Generate GradCAM
+                        try:
+                            target_layer = get_target_layer(st.session_state.model)
+                            cam = generate_gradcam(
+                                st.session_state.model,
+                                image_tensor,
+                                gender_tensor,
+                                target_layer,
+                            )
+
+                            # Save GradCAM image with unique name
+                            timestamp = int(time.time())
+                            temp_gradcam_path = f"temp_gradcam_test_{timestamp}.png"
+                            gradcam_success = save_gradcam_image(
+                                image_tensor, cam, temp_gradcam_path
+                            )
+
+                            col_img1, col_img2 = st.columns(2)
+                            with col_img1:
+                                display_image_with_aspect_ratio(
+                                    orig_pil, "Original X-Ray", 400
+                                )
+
+                            with col_img2:
+                                if gradcam_success and os.path.exists(
+                                    temp_gradcam_path
+                                ):
+                                    gradcam_img = Image.open(temp_gradcam_path)
+                                    display_image_with_aspect_ratio(
+                                        gradcam_img, "GradCAM Analysis", 400
+                                    )
+                                else:
+                                    st.error("GradCAM analysis could not be generated")
+
+                            # Clean up temporary file
+                            if os.path.exists(temp_gradcam_path):
+                                os.remove(temp_gradcam_path)
+
+                        except Exception as e:
+                            st.error(f"Error generating GradCAM: {str(e)}")
+                            # Show only original image if GradCAM fails
                             display_image_with_aspect_ratio(
                                 orig_pil, "Original X-Ray", 400
                             )
-
-                        with col_img2:
-                            if gradcam_success and os.path.exists(temp_gradcam_path):
-                                gradcam_img = Image.open(temp_gradcam_path)
-                                display_image_with_aspect_ratio(
-                                    gradcam_img, "GradCAM Analysis", 400
-                                )
-                            else:
-                                st.error("GradCAM analysis could not be generated")
-
-                        # Clean up temporary file
-                        if os.path.exists(temp_gradcam_path):
-                            os.remove(temp_gradcam_path)
-
-                    except Exception as e:
-                        st.error(f"Error generating GradCAM: {str(e)}")
-                        # Show only original image if GradCAM fails
-                        display_image_with_aspect_ratio(orig_pil, "Original X-Ray", 400)
+                    else:
+                        st.error("Prediction failed. Please try again.")
 
             except Exception as e:
                 st.error(f"Error during testing and saving: {str(e)}")
 
+
 def samples_page():
     """Sample images page"""
     st.markdown("### Sample Images")
-    st.markdown("Below are sample hand x-ray images used for training and testing the HandOsteoNet system.")
+    st.markdown(
+        "Below are sample hand x-ray images used for training and testing the HandOsteoNet system."
+    )
 
     # Get sample images from Samples directory
     samples_dir = "Samples"
@@ -908,17 +1130,20 @@ def samples_page():
         sample_files.sort()  # Sort for consistent display
 
         if sample_files:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="info-card">
                 <p><strong>Note:</strong> These sample images demonstrate the type of hand x-ray images 
                 that can be processed by HandOsteoNet. Each image shows the hand structure clearly 
                 for accurate bone age assessment. These images are used for training and validation purposes.</p>
             </div>
-            """, unsafe_allow_html=True)
-            
+            """,
+                unsafe_allow_html=True,
+            )
+
             # Display images in a professional grid layout
             st.markdown("### Sample X-Ray Images")
-            
+
             # Create a responsive grid
             num_cols = 3
             for i in range(0, len(sample_files), num_cols):
@@ -930,38 +1155,51 @@ def samples_page():
                             try:
                                 image_path = os.path.join(samples_dir, filename)
                                 image = Image.open(image_path)
-                                
+
                                 # Create a professional card for each image
-                                st.markdown(f"""
+                                st.markdown(
+                                    f"""
                                 <div class="sample-item">
                                     <h4 style="margin-bottom: 1rem; color: var(--text-primary);">Sample {i+j+1}</h4>
                                 </div>
-                                """, unsafe_allow_html=True)
-                                
+                                """,
+                                    unsafe_allow_html=True,
+                                )
+
                                 display_image_with_aspect_ratio(
                                     image, f"Sample {i+j+1}: {filename}", 300
                                 )
-                                
-                                st.markdown(f"""
+
+                                st.markdown(
+                                    f"""
                                 <div style="text-align: center; margin-top: 0.5rem;">
                                     <small style="color: var(--text-secondary);">{filename}</small>
                                 </div>
-                                """, unsafe_allow_html=True)
-                                
+                                """,
+                                    unsafe_allow_html=True,
+                                )
+
                             except Exception as e:
                                 st.error(f"Error loading {filename}: {str(e)}")
         else:
-            st.markdown("""
+            st.markdown(
+                """
             <div class="warning-card">
                 <p><strong>No Sample Images Found:</strong> The Samples directory is empty or contains no valid image files.</p>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
     else:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="error-card">
             <p><strong>Samples Directory Not Found:</strong> The Samples directory does not exist in the project structure.</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
+
 
 def how_to_use_page():
     """How to use guide page"""
@@ -972,12 +1210,15 @@ def how_to_use_page():
     video_path = "Video/sample_video.mp4"
 
     if os.path.exists(video_path):
-        st.markdown("""
+        st.markdown(
+            """
         <div class="info-card">
             <p><strong>Watch the Tutorial:</strong> Follow along with our step-by-step video guide to learn how to use HandOsteoNet effectively.</p>
         </div>
-        """, unsafe_allow_html=True)
-        
+        """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown(
             """
         <div class="video-container">
@@ -991,11 +1232,14 @@ def how_to_use_page():
         st.video(video_bytes)
         st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="warning-card">
             <p><strong>Video Tutorial Not Available:</strong> The tutorial video file was not found. Please refer to the text guidelines below.</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # Text guidelines
     st.markdown("#### Step-by-Step Guidelines")
@@ -1074,20 +1318,27 @@ def how_to_use_page():
             <li>Contact support for technical issues</li>
         </ul>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
+
 
 def privacy_policy_page():
     """Privacy policy page"""
     st.markdown("### Privacy Policy")
     st.markdown("**Effective Date: 1st January 2025**")
 
-    st.markdown("""
+    st.markdown(
+        """
     <div class="info-card">
         <p><strong>Your Privacy Matters:</strong> We are committed to protecting your privacy and ensuring the security of your data. This policy explains how we handle information on our platform.</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("""
+    st.markdown(
+        """
     <div class="info-card">
         <h4>Platform Information</h4>
         <p>Thank you for using our HandOsteoNet website hosted at https://handosteonet.streamlit.app. (will update the link later)</p>
@@ -1140,7 +1391,10 @@ def privacy_policy_page():
         <p><strong>Email:</strong> masum.cse19@gmail.com</p>
         <p>By using https://handosteonet.streamlit.app, you acknowledge and agree to the terms of this Privacy Policy.</p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
+
 
 def main():
     """Main application function"""
@@ -1177,6 +1431,7 @@ def main():
     """,
         unsafe_allow_html=True,
     )
+
 
 if __name__ == "__main__":
     main()
