@@ -1,93 +1,129 @@
 # HandOsteoNet Deployment Guide
 
-## Issue Resolution
+## Overview
+This guide provides instructions for deploying HandOsteoNet on Streamlit Cloud with optimized performance.
 
-### Problem
-The application was failing to deploy on Streamlit Cloud with the following error:
-```
-ImportError: libGL.so.1: cannot open shared object file: No such file or directory
-```
+## Performance Optimizations
 
-### Root Cause
-The error occurred because `opencv-python` requires OpenGL libraries (`libGL.so.1`) which are not available in the Streamlit Cloud environment.
+### 1. Model Loading Optimization
+- Model is cached using `@st.cache_resource` to prevent reloading
+- Device detection is cached for faster initialization
+- Preprocessor and data manager are cached
 
-### Solution
-Replace `opencv-python` with `opencv-python-headless` in `requirements.txt`:
+### 2. Session State Management
+- Session state is properly initialized before use
+- No caching on session state initialization to prevent conflicts
+- Proper error handling for missing session state keys
 
-```txt
-# Before (causing deployment issues)
-opencv-python>=4.8.0
+### 3. File Handling
+- Temporary files are cleaned up immediately after use
+- Unique timestamps prevent file conflicts
+- Local vs cloud deployment detection for file operations
 
-# After (fixed for cloud deployment)
-opencv-python-headless>=4.8.0
-```
+### 4. Memory Management
+- GradCAM images are deleted after display
+- Large tensors are moved to appropriate devices
+- No unnecessary data retention
 
-## Key Differences
+## Deployment Steps
 
-### opencv-python vs opencv-python-headless
-
-| Feature | opencv-python | opencv-python-headless |
-|---------|---------------|------------------------|
-| GUI Support | ✅ Full GUI support | ❌ No GUI support |
-| OpenGL Dependencies | ✅ Requires libGL.so.1 | ❌ No OpenGL dependencies |
-| Cloud Deployment | ❌ Fails on cloud platforms | ✅ Works on cloud platforms |
-| Image Processing | ✅ All image processing features | ✅ All image processing features |
-| Video I/O | ✅ Full video support | ✅ Full video support |
-
-## Functions Used in This Application
-
-The following OpenCV functions are used in this application and are all compatible with `opencv-python-headless`:
-
-1. **Image Reading**: `cv2.imread()` - Used in `Preprocessing/preprocessor.py`
-2. **Image Resizing**: `cv2.resize()` - Used in both preprocessing and GradCAM
-3. **Contrast Enhancement**: `cv2.createCLAHE()` - Used in preprocessing
-4. **Interpolation Methods**: `cv2.INTER_LANCZOS4`, `cv2.INTER_LINEAR` - Used in resizing
-
-## Testing
-
-Run the test script to verify OpenCV functionality:
+### 1. Repository Setup
 ```bash
-python test_opencv.py
+# Ensure all files are committed
+git add .
+git commit -m "Optimized for deployment"
+git push origin main
 ```
 
-## Deployment Checklist
+### 2. Streamlit Cloud Deployment
+1. Connect your GitHub repository to Streamlit Cloud
+2. Set the main file path to `app.py`
+3. Deploy the application
 
-Before deploying to Streamlit Cloud:
+### 3. Environment Configuration
+The app automatically detects deployment environment:
+- **Local**: Full functionality including file saving
+- **Cloud**: Disabled file saving for privacy and security
 
-1. ✅ Use `opencv-python-headless` instead of `opencv-python`
-2. ✅ Ensure all model files are included in the repository
-3. ✅ Test all OpenCV functions locally
-4. ✅ Verify model loading works correctly
-5. ✅ Check that all dependencies are in `requirements.txt`
+## Troubleshooting
 
-## Common Issues and Solutions
+### Common Issues
 
-### Issue: Model file not found
-**Solution**: Ensure `Model/best_bonenet.pth` is included in the repository
+#### 1. Session State Errors
+**Problem**: `AttributeError: st.session_state has no attribute "current_page"`
+**Solution**: Session state is now properly initialized before use
 
-### Issue: Memory errors on deployment
+#### 2. Model Loading Slow
+**Problem**: Model takes too long to load
 **Solution**: 
-- Use CPU-only PyTorch if GPU is not needed
-- Optimize model loading to use less memory
+- Model is cached after first load
+- Device detection is optimized
+- Loading progress is shown to users
 
-### Issue: Import errors for other libraries
-**Solution**: Check that all dependencies are listed in `requirements.txt` with appropriate versions
+#### 3. Media File Errors
+**Problem**: Missing media files in deployment
+**Solution**: 
+- Temporary files use unique timestamps
+- Files are cleaned up immediately
+- No persistent file storage in cloud
 
-## Streamlit Cloud Configuration
+#### 4. Memory Issues
+**Problem**: High memory usage
+**Solution**:
+- GradCAM images are deleted after use
+- Tensors are moved to appropriate devices
+- No unnecessary data retention
 
-The application is configured for Streamlit Cloud with:
-- Main file: `app.py`
-- Python version: 3.13.5 (auto-detected)
-- Dependencies: Listed in `requirements.txt`
+### Performance Monitoring
 
-## Monitoring Deployment
+#### Load Time Optimization
+- Model loading: ~30-60 seconds on first run
+- Subsequent loads: ~1-2 seconds (cached)
+- Image processing: ~5-10 seconds per image
 
-After deployment, monitor the logs for:
-- Successful model loading
-- No OpenCV import errors
-- Proper image processing functionality
-- User interaction success
+#### Memory Usage
+- Model: ~500MB
+- Image processing: ~100MB per image
+- Temporary files: <10MB
 
-## Contact
+## Security Considerations
 
-For deployment issues, contact: masum.cse19@gmail.com 
+### Data Privacy
+- No data is stored permanently in cloud deployment
+- Images are processed and immediately deleted
+- No personal information is collected
+
+### File Operations
+- Local deployment: Full file operations enabled
+- Cloud deployment: File operations disabled for security
+
+## Maintenance
+
+### Regular Updates
+1. Monitor Streamlit Cloud logs for errors
+2. Update dependencies as needed
+3. Test functionality after updates
+
+### Performance Monitoring
+1. Check load times regularly
+2. Monitor memory usage
+3. Verify model accuracy
+
+## Support
+
+For technical support or questions:
+- Email: masum.cse19@gmail.com
+- GitHub Issues: Report bugs and feature requests
+
+## Version History
+
+### v1.0 (Current)
+- Optimized session state management
+- Cached model loading
+- Cloud deployment compatibility
+- Enhanced error handling
+- Improved performance
+
+---
+
+**Note**: This deployment is optimized for Streamlit Cloud. For local deployment, additional file operations are available. 

@@ -141,8 +141,4 @@ This application is designed for clinical use with:
 
 ## License
 
-For clinical use and research purposes. © 2024 Qatar University Research Team.
-
-## Support
-
-For technical support or questions about the model architecture, please refer to the original notebook in `../QU_Final_Attention_SEG_v2/qu_final_attention_seg_v2.ipynb`. 
+For clinical use and research purposes. © @iinaamasum 2025.

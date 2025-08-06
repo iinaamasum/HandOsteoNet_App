@@ -1,0 +1,20 @@
+[server]
+# Optimize server settings for better performance
+maxUploadSize = 200
+enableXsrfProtection = false
+enableCORS = false
+
+[browser]
+# Optimize browser settings
+gatherUsageStats = false
+
+[theme]
+# Use a clean, professional theme
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8f9fa"
+textColor = "#262730"
+
+[client]
+# Optimize client settings
+showErrorDetails = false 

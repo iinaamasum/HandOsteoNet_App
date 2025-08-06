@@ -306,10 +306,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state with caching
-@st.cache_resource
+# Initialize session state properly
 def initialize_session_state():
-    """Initialize session state with caching"""
+    """Initialize session state"""
     if "model_loaded" not in st.session_state:
         st.session_state.model_loaded = False
     if "model" not in st.session_state:
@@ -789,16 +788,20 @@ def testing_page():
                     # Calculate metrics
                     metrics = calculate_metrics(predicted_months, actual_age)
 
-                    # Save data
-                    gender_bool = gender_test == "Male"
-                    xray_id, image_path = data_manager.save_xray_data(
-                        image_tensor, gender_bool, actual_age
-                    )
-
-                    # Display results
-                    st.markdown('<div class="success-card">', unsafe_allow_html=True)
-                    st.success(f"✅ Data saved successfully! X-Ray ID: {xray_id}")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    # Save data (only for local deployment)
+                    is_local = os.path.exists("/Users") or os.path.exists("/home/user")
+                    if is_local:
+                        gender_bool = gender_test == "Male"
+                        xray_id, image_path = data_manager.save_xray_data(
+                            image_tensor, gender_bool, actual_age
+                        )
+                        st.markdown('<div class="success-card">', unsafe_allow_html=True)
+                        st.success(f"✅ Data saved successfully! X-Ray ID: {xray_id}")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+                        st.info("ℹ️ Data saving is disabled in cloud deployment for privacy and security.")
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                     # Results in columns
                     col1, col2 = st.columns(2)

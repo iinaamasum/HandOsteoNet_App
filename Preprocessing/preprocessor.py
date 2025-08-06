@@ -72,12 +72,30 @@ class DataManager:
         self.csv_dir = os.path.join(hmc_data_dir, "CSV")
         self.csv_path = os.path.join(self.csv_dir, "hmc_data.csv")
         
-        # Create directories if they don't exist
-        os.makedirs(self.new_xray_dir, exist_ok=True)
-        os.makedirs(self.csv_dir, exist_ok=True)
+        # Check if we're in a cloud deployment environment
+        self.is_cloud_deployment = self._is_cloud_deployment()
         
-        # Initialize CSV if it doesn't exist
-        self._initialize_csv()
+        # Only create directories and files if not in cloud deployment
+        if not self.is_cloud_deployment:
+            # Create directories if they don't exist
+            os.makedirs(self.new_xray_dir, exist_ok=True)
+            os.makedirs(self.csv_dir, exist_ok=True)
+            
+            # Initialize CSV if it doesn't exist
+            self._initialize_csv()
+    
+    def _is_cloud_deployment(self):
+        """Check if we're running in a cloud deployment environment"""
+        # Check for common cloud deployment indicators
+        cloud_indicators = [
+            "/home/adminuser",  # Streamlit Cloud
+            "/app",  # Heroku
+            "/opt",  # Docker containers
+            "/var",  # Various cloud platforms
+        ]
+        
+        current_path = os.getcwd()
+        return any(indicator in current_path for indicator in cloud_indicators)
     
     def _initialize_csv(self):
         """Initialize CSV file with headers if it doesn't exist"""
@@ -87,6 +105,11 @@ class DataManager:
     
     def get_next_id(self):
         """Get the next available ID for new x-ray"""
+        if self.is_cloud_deployment:
+            # In cloud deployment, generate a timestamp-based ID
+            timestamp = int(datetime.now().timestamp())
+            return f"HMC_{timestamp}"
+        
         if os.path.exists(self.csv_path):
             df = pd.read_csv(self.csv_path)
             if len(df) > 0:
@@ -121,6 +144,10 @@ class DataManager:
         # Generate unique ID
         xray_id = self.get_next_id()
         
+        # In cloud deployment, don't save files
+        if self.is_cloud_deployment:
+            return xray_id, None
+        
         # Save image
         image_path = os.path.join(self.new_xray_dir, f"{xray_id}.png")
         
@@ -153,6 +180,10 @@ class DataManager:
     
     def get_all_data(self):
         """Get all saved data"""
+        if self.is_cloud_deployment:
+            # In cloud deployment, return empty DataFrame
+            return pd.DataFrame(columns=['id', 'male', 'boneage'])
+        
         if os.path.exists(self.csv_path):
             return pd.read_csv(self.csv_path)
         return pd.DataFrame(columns=['id', 'male', 'boneage']) 
