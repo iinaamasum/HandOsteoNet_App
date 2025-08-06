@@ -7,6 +7,8 @@ import sys
 from PIL import Image
 import tempfile
 import base64
+import hashlib
+import time
 
 # Add the current directory to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -304,24 +306,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Initialize session state with caching
+@st.cache_resource
+def initialize_session_state():
+    """Initialize session state with caching"""
+    if "model_loaded" not in st.session_state:
+        st.session_state.model_loaded = False
+    if "model" not in st.session_state:
+        st.session_state.model = None
+    if "device" not in st.session_state:
+        st.session_state.device = None
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "Home"
+    if "preprocessor" not in st.session_state:
+        st.session_state.preprocessor = None
+    if "data_manager" not in st.session_state:
+        st.session_state.data_manager = None
+
 # Initialize session state
-if "model_loaded" not in st.session_state:
-    st.session_state.model_loaded = False
-if "model" not in st.session_state:
-    st.session_state.model = None
-if "device" not in st.session_state:
-    st.session_state.device = None
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Home"
+initialize_session_state()
 
+@st.cache_resource
+def get_device():
+    """Get device with caching"""
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+@st.cache_resource
 def load_model_safely():
-    """Load the model safely with error handling"""
+    """Load the model safely with error handling and caching"""
     try:
         if not st.session_state.model_loaded:
             with st.spinner("Loading HandOsteoNet model..."):
                 # Set device
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                device = get_device()
                 st.session_state.device = device
 
                 # Load model
@@ -341,6 +358,19 @@ def load_model_safely():
         st.error(f"Error loading model: {str(e)}")
         return False
 
+@st.cache_resource
+def get_preprocessor():
+    """Get preprocessor with caching"""
+    if st.session_state.preprocessor is None:
+        st.session_state.preprocessor = ImagePreprocessor()
+    return st.session_state.preprocessor
+
+@st.cache_resource
+def get_data_manager():
+    """Get data manager with caching"""
+    if st.session_state.data_manager is None:
+        st.session_state.data_manager = DataManager()
+    return st.session_state.data_manager
 
 def create_navigation():
     """Create navigation menu"""
@@ -371,7 +401,6 @@ def create_navigation():
     
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
 def display_image_with_aspect_ratio(image, caption, max_width=400):
     """Display image maintaining aspect ratio"""
     if image is None:
@@ -392,7 +421,6 @@ def display_image_with_aspect_ratio(image, caption, max_width=400):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image(resized_image, caption=caption, use_container_width=True)
-
 
 def home_page():
     """Home page content"""
@@ -437,7 +465,6 @@ def home_page():
     else:
         st.error("❌ Model loading failed. Please refresh the page.")
 
-
 def evaluate_page():
     """Model evaluation page"""
     st.markdown("### Model Evaluation")
@@ -448,7 +475,7 @@ def evaluate_page():
         st.stop()
 
     # Initialize components
-    preprocessor = ImagePreprocessor()
+    preprocessor = get_preprocessor()
 
     # File upload
     uploaded_file = st.file_uploader(
@@ -585,10 +612,9 @@ def evaluate_page():
                             target_layer,
                         )
 
-                        # Save GradCAM image
-                        temp_gradcam_path = (
-                            f"temp_gradcam_{np.random.randint(1000)}.png"
-                        )
+                        # Save GradCAM image with unique name
+                        timestamp = int(time.time())
+                        temp_gradcam_path = f"temp_gradcam_{timestamp}.png"
                         gradcam_success = save_gradcam_image(
                             image_tensor, cam, temp_gradcam_path
                         )
@@ -620,7 +646,6 @@ def evaluate_page():
             except Exception as e:
                 st.error(f"Error during evaluation: {str(e)}")
 
-
 def testing_page():
     """Testing and save data page"""
     st.markdown("### Testing & Save HMC Data")
@@ -633,8 +658,8 @@ def testing_page():
         st.stop()
 
     # Initialize components
-    preprocessor = ImagePreprocessor()
-    data_manager = DataManager()
+    preprocessor = get_preprocessor()
+    data_manager = get_data_manager()
 
     # File upload
     uploaded_file_test = st.file_uploader(
@@ -830,10 +855,9 @@ def testing_page():
                             target_layer,
                         )
 
-                        # Save GradCAM image
-                        temp_gradcam_path = (
-                            f"temp_gradcam_test_{np.random.randint(1000)}.png"
-                        )
+                        # Save GradCAM image with unique name
+                        timestamp = int(time.time())
+                        temp_gradcam_path = f"temp_gradcam_test_{timestamp}.png"
                         gradcam_success = save_gradcam_image(
                             image_tensor, cam, temp_gradcam_path
                         )
@@ -864,7 +888,6 @@ def testing_page():
 
             except Exception as e:
                 st.error(f"Error during testing and saving: {str(e)}")
-
 
 def samples_page():
     """Sample images page"""
@@ -936,7 +959,6 @@ def samples_page():
             <p><strong>Samples Directory Not Found:</strong> The Samples directory does not exist in the project structure.</p>
         </div>
         """, unsafe_allow_html=True)
-
 
 def how_to_use_page():
     """How to use guide page"""
@@ -1051,7 +1073,6 @@ def how_to_use_page():
     </div>
     """, unsafe_allow_html=True)
 
-
 def privacy_policy_page():
     """Privacy policy page"""
     st.markdown("### Privacy Policy")
@@ -1118,7 +1139,6 @@ def privacy_policy_page():
     </div>
     """, unsafe_allow_html=True)
 
-
 def main():
     """Main application function"""
     # Create navigation
@@ -1154,7 +1174,6 @@ def main():
     """,
         unsafe_allow_html=True,
     )
-
 
 if __name__ == "__main__":
     main()
