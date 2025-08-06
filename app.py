@@ -386,20 +386,20 @@ def validate_model_working():
     try:
         if st.session_state.model is None:
             return False, "Model is None"
-        
+
         # Create a dummy input to test the model
         device = st.session_state.device
         dummy_image = torch.randn(1, 3, 480, 480).to(device)
         dummy_gender = torch.tensor([1.0]).to(device)
-        
+
         with torch.no_grad():
             output = st.session_state.model(dummy_image, dummy_gender)
-        
+
         if output is None:
             return False, "Model output is None"
-        
+
         return True, f"Model is working (output: {output.item():.2f})"
-        
+
     except Exception as e:
         return False, f"Model validation failed: {str(e)}"
 
@@ -568,7 +568,7 @@ def home_page():
     <div class="main-header">
         <h1>HandOsteoNet</h1>
         <h3>Advanced Bone Age Assessment System</h3>
-        <p>Developed by Qatar University Research Team, led by Amith Khandakar</p>
+        <p>Developed by Qatar University Research Team, led by Dr. Amith Khandakar</p>
     </div>
     """,
         unsafe_allow_html=True,
